@@ -6,7 +6,7 @@
 
 ### 报告Bug
 
-如果你发现了Bug，请通过[Issues](https://github.com/YOUR_USERNAME/campus-auth-openwrt/issues)提交：
+如果你发现了Bug，请通过[Issues](https://github.com/pengcong226/campus-auth-openwrt/issues)提交：
 
 1. 使用清晰的标题描述问题
 2. 提供详细的环境信息：
@@ -33,7 +33,7 @@
 # 1. Fork本项目到你的GitHub账号
 
 # 2. Clone你的fork
-git clone https://github.com/YOUR_USERNAME/campus-auth-openwrt.git
+git clone https://github.com/pengcong226/campus-auth-openwrt.git
 cd campus-auth-openwrt
 
 # 3. 创建功能分支
@@ -339,9 +339,9 @@ tcpdump -i wan -A port 443
 
 ## 🙋 获取帮助
 
-- 📖 阅读 [Wiki](https://github.com/YOUR_USERNAME/campus-auth-openwrt/wiki)
-- 💬 在 [Discussions](https://github.com/YOUR_USERNAME/campus-auth-openwrt/discussions) 提问
-- 🐛 提交 [Issue](https://github.com/YOUR_USERNAME/campus-auth-openwrt/issues)
+- 📖 阅读 [Wiki](https://github.com/pengcong226/campus-auth-openwrt/wiki)
+- 💬 在 [Discussions](https://github.com/pengcong226/campus-auth-openwrt/discussions) 提问
+- 🐛 提交 [Issue](https://github.com/pengcong226/campus-auth-openwrt/issues)
 
 ## 📜 许可证
 

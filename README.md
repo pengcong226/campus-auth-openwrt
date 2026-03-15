@@ -28,14 +28,14 @@
 
 ```bash
 # 下载并执行安装脚本
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/campus-auth-openwrt/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pengcong226/campus-auth-openwrt/main/install.sh | sh
 ```
 
 ### 方法2: 手动安装
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/YOUR_USERNAME/campus-auth-openwrt.git
+git clone https://github.com/pengcong226/campus-auth-openwrt.git
 cd campus-auth-openwrt
 
 # 2. 上传到路由器
@@ -271,9 +271,9 @@ WAN_GATEWAY_DEFAULT="x.x.x.x"
 
 欢迎提交 Issue 和 Pull Request！
 
-- 🐛 Bug反馈：[Issues](https://github.com/YOUR_USERNAME/campus-auth-openwrt/issues)
-- 💡 功能建议：[Discussions](https://github.com/YOUR_USERNAME/campus-auth-openwrt/discussions)
-- 🔧 贡献代码：[Pull Requests](https://github.com/YOUR_USERNAME/campus-auth-openwrt/pulls)
+- 🐛 Bug反馈：[Issues](https://github.com/pengcong226/campus-auth-openwrt/issues)
+- 💡 功能建议：[Discussions](https://github.com/pengcong226/campus-auth-openwrt/discussions)
+- 🔧 贡献代码：[Pull Requests](https://github.com/pengcong226/campus-auth-openwrt/pulls)
 
 ---
 

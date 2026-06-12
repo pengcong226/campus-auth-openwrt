@@ -168,6 +168,8 @@ uci commit campus_auth
 7. 钉钉通知 → 推送结果
 ```
 
+认证页面的探测结论和 `urlParameter/distoken` 取舍说明见 [docs/PORTAL_AUTH_PAGE_NOTES.md](docs/PORTAL_AUTH_PAGE_NOTES.md)。
+
 ### mwan3联动
 
 ```

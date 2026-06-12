@@ -94,6 +94,21 @@ def main() -> None:
         "sanitize_auth_text",
         "auth script should redact sensitive portal fields before logging response snippets",
     )
+    assert_contains(
+        text,
+        "get_portal_url_parameter",
+        "auth script should capture the BRAS redirect query for the login POST",
+    )
+    assert_contains(
+        text,
+        'auth_url="${auth_url}?${url_parameter}"',
+        "auth script should submit to webauth.do with the portal urlParameter query",
+    )
+    assert_contains(
+        text,
+        '--data-urlencode "passwd=${PASSWORD}"',
+        "auth script should URL-encode credentials in form submissions",
+    )
 
 
 if __name__ == "__main__":

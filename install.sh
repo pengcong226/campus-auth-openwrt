@@ -279,33 +279,6 @@ sanitize_auth_text() {
         | cut -c1-300
 }
 
-get_portal_url_parameter() {
-    local headers=""
-    local location=""
-
-    headers=$(curl -sk \
-        --interface "$WAN_DEV" \
-        --noproxy "*" \
-        -D - \
-        -o /dev/null \
-        --connect-timeout 5 \
-        --max-time 10 \
-        "http://${AC_IP}/" 2>/dev/null)
-
-    location=$(printf '%s\n' "$headers" | tr -d '\r' | grep -i '^Location:' | head -1 | sed 's/^[^:]*:[[:space:]]*//')
-    case "$location" in
-        *\?*) printf '%s' "${location#*\?}" ;;
-        *) printf '' ;;
-    esac
-}
-
-get_query_value() {
-    local query="$1"
-    local key="$2"
-
-    printf '%s' "$query" | tr '&' '\n' | sed -n "s/^${key}=//p" | head -1
-}
-
 is_external_dial_pending() {
     printf '%s' "$1" | grep -qiE "正在进行外网|外网[拨拔]号|请稍候|getAuthResult"
 }
@@ -410,12 +383,6 @@ do_auth() {
         # 清理旧Cookie
         rm -f "$COOKIE_FILE"
         
-        local url_parameter=$(get_portal_url_parameter)
-        [ -n "$url_parameter" ] && log "INFO" "已获取BRAS门户参数: $(sanitize_auth_text "$url_parameter")"
-        local distoken=$(get_query_value "$url_parameter" "distoken")
-        local init_url=$(get_query_value "$url_parameter" "url")
-        [ -z "$init_url" ] && init_url="http://${AC_IP}"
-
         # 获取初始Cookie。先访问BRAS重定向页，确保门户下发的会话字段与当前IP/MAC匹配。
         curl -skL --connect-timeout 5 \
             --max-time 12 \
@@ -438,9 +405,7 @@ do_auth() {
         data="${data}&scheme=https&serverIp=tomcat_server1:443&hostIp=http://127.0.0.1:8446/&loginType=&auth_type=${AUTH_TYPE}"
         data="${data}&isBindMac1=${IS_BIND_MAC}&pageid=${PAGEID}&templatetype=${TEMPLATETYPE}&listbindmac=0&recordmac=0&isRemind=1"
         data="${data}&portalVer=0&tservertypeid=axe&realTerminalType=a&operatorastrict=0,1,2,3"
-        data="${data}&distoken=${distoken}&echostr=&loginTimes=&groupId=&url=${init_url}&remInfo=on"
-        local auth_url="https://${AUTH_DOMAIN}/webauth.do"
-        [ -n "$url_parameter" ] && auth_url="${auth_url}?${url_parameter}"
+        data="${data}&echostr=&loginTimes=&groupId=&url=http://${AC_IP}&remInfo=on"
         
         # 发送认证请求
         local response=$(curl -sSki \
@@ -453,12 +418,12 @@ do_auth() {
             -c "$COOKIE_FILE" \
             -H "Host: ${AUTH_DOMAIN}" \
             -H "Origin: https://${AUTH_DOMAIN}" \
-            -H "Referer: ${auth_url}" \
+            -H "Referer: https://${AUTH_DOMAIN}/webauth.do" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "$data" \
             --data-urlencode "userId=${USERNAME}" \
             --data-urlencode "passwd=${PASSWORD}" \
-            "$auth_url" 2>&1)
+            "https://${AUTH_DOMAIN}/webauth.do" 2>&1)
         
         sleep 2
         

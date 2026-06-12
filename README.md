@@ -131,6 +131,8 @@ config auth
     option wan_device 'wan'             # WAN接口名称
     option max_retry '3'                # 最大重试次数
     option retry_delay '5'              # 重试间隔(秒)
+    option auth_poll_max '20'           # 外网拨号结果轮询次数
+    option auth_poll_interval '2'       # 外网拨号轮询间隔(秒)
 ```
 
 ### 钉钉通知配置
@@ -158,11 +160,12 @@ uci commit campus_auth
 
 ```
 1. 检测认证状态 → HTTP 204测试
-2. 需要认证 → 获取Cookie
+2. 需要认证 → 访问BRAS重定向页并获取Cookie
 3. 构造认证数据 → 发送到认证服务器
-4. 验证结果 → Ping外网IP
-5. 失败重试 → 最多重试3次
-6. 钉钉通知 → 推送结果
+4. 如返回“正在进行外网拨号” → 轮询 getAuthResult.do
+5. 验证结果 → HTTP 204 / Ping外网IP
+6. 失败重试 → 最多重试3次
+7. 钉钉通知 → 推送结果
 ```
 
 ### mwan3联动

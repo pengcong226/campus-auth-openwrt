@@ -59,6 +59,12 @@ uci set campus_auth.@auth[0].max_retry='5'
 # 重试间隔（默认5秒）
 uci set campus_auth.@auth[0].retry_delay='10'
 
+# 外网拨号结果轮询次数（默认20次）
+uci set campus_auth.@auth[0].auth_poll_max='20'
+
+# 外网拨号结果轮询间隔（默认2秒）
+uci set campus_auth.@auth[0].auth_poll_interval='2'
+
 uci commit campus_auth
 ```
 
@@ -233,11 +239,13 @@ WAN_GATEWAY_DEFAULT="x.x.x.x"
 
 #### 步骤3: 修改认证请求
 
-编辑 `/root/campus_auth.sh` 第299-303行：
+编辑 `/root/campus_auth.sh` 中构造认证数据的片段：
 
 ```bash
 # 根据实际抓包结果调整参数
 local data="wlanacip=${AC_IP}&wlanacname=${AC_NAME}&wlanuserip=${ip}&mac=${macl}"
+data="${data}&scheme=https&serverIp=tomcat_server1:443&hostIp=http://127.0.0.1:8446/"
+data="${data}&pageid=${PAGEID}&templatetype=${TEMPLATETYPE}&portalVer=0&tservertypeid=axe"
 data="${data}&userId=${USERNAME}&passwd=${PASSWORD}"
 # 添加其他必需参数...
 ```

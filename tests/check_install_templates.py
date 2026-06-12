@@ -74,6 +74,27 @@ def main() -> None:
         "cron health check should discard wrapper output",
     )
 
+    assert_contains(
+        text,
+        "option auth_poll_max '20'",
+        "default config should expose the portal dial-result polling count",
+    )
+    assert_contains(
+        text,
+        "getAuthResult.do",
+        "auth script should poll the portal dial-result endpoint after pending login",
+    )
+    assert_contains(
+        text,
+        "正在进行外网",
+        "auth script should recognize the portal pending external-dial state",
+    )
+    assert_contains(
+        text,
+        "sanitize_auth_text",
+        "auth script should redact sensitive portal fields before logging response snippets",
+    )
+
 
 if __name__ == "__main__":
     main()

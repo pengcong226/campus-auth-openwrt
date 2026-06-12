@@ -53,6 +53,8 @@ config auth
     option wan_gateway '172.17.21.1'
     option max_retry '3'
     option retry_delay '5'
+    option auth_poll_max '20'
+    option auth_poll_interval '2'
     option vlan '0'
     option auth_type '0'
     option isBindMac '0'
@@ -179,6 +181,10 @@ load_config() {
     # 重试配置
     MAX_RETRY=$(uci -q get campus_auth.@auth[0].max_retry || echo "3")
     RETRY_DELAY=$(uci -q get campus_auth.@auth[0].retry_delay || echo "5")
+    AUTH_POLL_MAX=$(uci -q get campus_auth.@auth[0].auth_poll_max || echo "20")
+    AUTH_POLL_INTERVAL=$(uci -q get campus_auth.@auth[0].auth_poll_interval || echo "2")
+    case "$AUTH_POLL_MAX" in ''|*[!0-9]*) AUTH_POLL_MAX=20 ;; esac
+    case "$AUTH_POLL_INTERVAL" in ''|*[!0-9]*) AUTH_POLL_INTERVAL=2 ;; esac
     
     # 通知配置
     DINGTALK_ENABLED=$(uci -q get campus_auth.@notify[0].enabled || echo "0")
@@ -249,6 +255,92 @@ check_need_auth() {
     esac
 }
 
+verify_internet() {
+    ping -c1 -W2 -I "$WAN_DEV" 223.5.5.5 >/dev/null 2>&1 && return 0
+
+    local response=$(curl -so /dev/null -w "%{http_code}" \
+        --interface "$WAN_DEV" \
+        --noproxy "*" \
+        --connect-timeout 3 \
+        --max-time 5 \
+        "http://connect.rom.miui.com/generate_204" 2>/dev/null)
+
+    [ "$response" = "204" ]
+}
+
+sanitize_auth_text() {
+    printf '%s' "$1" | tr '\r\n' '  ' | sed \
+        -e 's/passwd=[^& ]*/passwd=***/g' \
+        -e 's/userId=[^& ]*/userId=***/g' \
+        -e 's/distoken=[^& ]*/distoken=***/g' \
+        -e 's/mac=[^& ]*/mac=***/g' \
+        -e 's/wlanuserip=[^& ]*/wlanuserip=***/g' \
+        -e 's/"userId"[[:space:]]*:[[:space:]]*"[^"]*"/"userId":"***"/g' \
+        | cut -c1-300
+}
+
+is_external_dial_pending() {
+    printf '%s' "$1" | grep -qiE "正在进行外网|外网[拨拔]号|请稍候|getAuthResult"
+}
+
+is_auth_rejected() {
+    printf '%s' "$1" | grep -qiE "认证失败|登录失败|密码错误|余额不足|账号异常|fail"
+}
+
+poll_auth_result() {
+    local account_id="$1"
+    local page_id="${2:-5}"
+    local attempt=0
+    local poll_result=""
+
+    [ -z "$account_id" ] && return 1
+    [ "$AUTH_POLL_MAX" -le 0 ] && return 1
+
+    log "INFO" "认证已提交，等待外网拨号结果..."
+
+    while [ "$attempt" -lt "$AUTH_POLL_MAX" ]; do
+        attempt=$((attempt + 1))
+        sleep "$AUTH_POLL_INTERVAL"
+
+        verify_internet && return 0
+
+        poll_result=$(curl -skS \
+            --interface "$WAN_DEV" \
+            --noproxy "*" \
+            --connect-timeout 5 \
+            --max-time 10 \
+            --resolve "${AUTH_DOMAIN}:443:${AUTH_SERVER_IP}" \
+            -b "$COOKIE_FILE" \
+            -c "$COOKIE_FILE" \
+            -H "Host: ${AUTH_DOMAIN}" \
+            -H "Origin: https://${AUTH_DOMAIN}" \
+            -H "Referer: https://${AUTH_DOMAIN}/webauth.do" \
+            -H "X-Requested-With: XMLHttpRequest" \
+            -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
+            -d "userId=${account_id}&pageId=${page_id}" \
+            "https://${AUTH_DOMAIN}/getAuthResult.do" 2>&1)
+
+        verify_internet && return 0
+
+        if printf '%s' "$poll_result" | grep -qiE "认证成功|登录成功|已在线|success|online|LOGINSUCC|true"; then
+            sleep 2
+            verify_internet && return 0
+        fi
+
+        if is_auth_rejected "$poll_result"; then
+            log "WARN" "认证轮询返回失败: $(sanitize_auth_text "$poll_result")"
+            return 1
+        fi
+
+        if [ $((attempt % 5)) -eq 0 ]; then
+            log "INFO" "外网拨号仍在处理中 (${attempt}/${AUTH_POLL_MAX})"
+        fi
+    done
+
+    [ -n "$poll_result" ] && log "WARN" "认证轮询超时，最后响应: $(sanitize_auth_text "$poll_result")"
+    return 1
+}
+
 # 执行认证（带重试）
 do_auth() {
     # 防止并发执行
@@ -278,6 +370,7 @@ do_auth() {
     
     # 添加静态路由
     ip route add "$AUTH_SERVER_IP" via "$WAN_GW" dev "$WAN_DEV" 2>/dev/null || true
+    ip route add "$AC_IP" via "$WAN_GW" dev "$WAN_DEV" 2>/dev/null || true
     
     local retry=0
     local success=0
@@ -289,17 +382,28 @@ do_auth() {
         # 清理旧Cookie
         rm -f "$COOKIE_FILE"
         
-        # 获取初始Cookie
+        # 获取初始Cookie。先访问BRAS重定向页，确保门户下发的会话字段与当前IP/MAC匹配。
+        curl -skL --connect-timeout 5 \
+            --max-time 12 \
+            --interface "$WAN_DEV" \
+            --noproxy "*" \
+            --resolve "${AUTH_DOMAIN}:443:${AUTH_SERVER_IP}" \
+            -c "$COOKIE_FILE" \
+            "http://${AC_IP}/" >/dev/null 2>&1
+
         curl -sk --connect-timeout 5 \
             --interface "$WAN_DEV" \
+            --noproxy "*" \
             --resolve "${AUTH_DOMAIN}:443:${AUTH_SERVER_IP}" \
+            -b "$COOKIE_FILE" \
             -c "$COOKIE_FILE" \
             "https://${AUTH_DOMAIN}/" >/dev/null 2>&1
         
         # 构造认证数据（使用可配置参数）
         local data="wlanacip=${AC_IP}&wlanacname=${AC_NAME}&wlanuserip=${ip}&mac=${macl}&vlan=${VLAN}"
-        data="${data}&scheme=https&serverIp=tomcat_server1:443&loginType=&auth_type=${AUTH_TYPE}"
+        data="${data}&scheme=https&serverIp=tomcat_server1:443&hostIp=http://127.0.0.1:8446/&loginType=&auth_type=${AUTH_TYPE}"
         data="${data}&isBindMac1=${IS_BIND_MAC}&pageid=${PAGEID}&templatetype=${TEMPLATETYPE}&listbindmac=0&recordmac=0&isRemind=1"
+        data="${data}&portalVer=0&tservertypeid=axe&realTerminalType=a&operatorastrict=0,1,2,3"
         data="${data}&userId=${USERNAME}&passwd=${PASSWORD}&remInfo=on"
         
         # 发送认证请求
@@ -319,11 +423,23 @@ do_auth() {
         sleep 2
         
         # 验证认证结果
-        if ping -c1 -W2 -I "$WAN_DEV" 223.5.5.5 >/dev/null 2>&1; then
+        if verify_internet; then
             log "INFO" "✅ 认证成功 (第 $retry 次尝试)"
             send_dingtalk "✅ 校园网认证成功" "账号: ${USERNAME}\\n重试次数: ${retry}"
             success=1
             break
+        fi
+
+        if is_external_dial_pending "$response"; then
+            if poll_auth_result "$USERNAME" "$PAGEID"; then
+                log "INFO" "✅ 认证成功 (第 $retry 次尝试，外网拨号完成)"
+                send_dingtalk "✅ 校园网认证成功" "账号: ${USERNAME}\\n重试次数: ${retry}\\n外网拨号已完成"
+                success=1
+                break
+            fi
+            log "WARN" "外网拨号未完成: $(sanitize_auth_text "$response")"
+        elif is_auth_rejected "$response"; then
+            log "WARN" "认证服务器返回失败: $(sanitize_auth_text "$response")"
         fi
         
         # 检查是否在非上网时段
@@ -860,6 +976,18 @@ o.default = "5"
 o.datatype = "uinteger"
 o.placeholder = "5"
 o.description = "每次重试之间的等待时间"
+
+o = s4:option(Value, "auth_poll_max", "拨号结果轮询次数")
+o.default = "20"
+o.datatype = "uinteger"
+o.placeholder = "20"
+o.description = "门户返回正在进行外网拨号时，继续查询最终结果的次数"
+
+o = s4:option(Value, "auth_poll_interval", "拨号轮询间隔(秒)")
+o.default = "2"
+o.datatype = "uinteger"
+o.placeholder = "2"
+o.description = "查询外网拨号结果的间隔"
 
 return m
 CBIEOF

@@ -39,7 +39,7 @@ git clone https://github.com/pengcong226/campus-auth-openwrt.git
 cd campus-auth-openwrt
 
 # 2. 上传到路由器
-scp campus_auth_install.sh root@192.168.1.1:/tmp/
+scp install.sh root@192.168.1.1:/tmp/campus_auth_install.sh
 
 # 3. SSH到路由器执行安装
 ssh root@192.168.1.1

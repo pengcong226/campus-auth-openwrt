@@ -309,7 +309,7 @@ tcpdump -i wan -A port 443
 
 ```bash
 # 模拟mwan3事件
-/interface='wan' /action='connected' /etc/mwan3.user
+INTERFACE='wan' ACTION='ifup' /etc/mwan3.user
 
 # 模拟定时期段
 /root/campus_auth.sh midnight

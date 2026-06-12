@@ -100,7 +100,7 @@ uci commit campus_auth
 crontab -e
 
 # 添加自定义任务
-0 7 * * * /root/campus_auth.sh login >> /var/log/campus_auth.log 2>&1
+0 7 * * * /root/campus_auth.sh login >/dev/null 2>&1
 ```
 
 ## 多线路配置

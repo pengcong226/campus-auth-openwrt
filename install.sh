@@ -386,8 +386,13 @@ handle_schedule() {
             sleep 10
             mwan3 ifup wan 2>/dev/null || true
             sleep 5
-            do_auth
-            send_dingtalk "☀️ 6点切换" "校园网已启用并完成认证"
+            if do_auth; then
+                send_dingtalk "☀️ 6点切换" "校园网已启用并完成认证"
+            else
+                local rc=$?
+                local status=$(check_need_auth)
+                send_dingtalk "⚠️ 6点切换" "校园网已启用，但认证未成功\n返回码: ${rc}\n当前状态: ${status}"
+            fi
             ;;
     esac
 }
@@ -486,7 +491,11 @@ mkdir -p /var/run/mwan3track/wan
 mkdir -p /var/run/mwan3track/lan1
 mkdir -p /var/run/mwan3track/u20
 
-cat > /etc/config/mwan3 << 'MWAN3EOF'
+if [ -s /etc/config/mwan3 ]; then
+    cp -a /etc/config/mwan3 "/etc/config/mwan3.bak-campus_auth-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+    echo "✅ 检测到已有 mwan3 配置，已备份并跳过自动覆盖"
+else
+    cat > /etc/config/mwan3 << 'MWAN3EOF'
 config globals 'globals'
     option enabled '1'
     option mmx_mask '0x3F00'
@@ -566,6 +575,7 @@ config rule 'default_rule'
     option sticky '0'
     option use_policy 'failover'
 MWAN3EOF
+fi
 
 # ============================================================
 # 6. 配置 mwan3 Hook
@@ -574,10 +584,10 @@ echo "📝 配置 mwan3 事件钩子..."
 
 cat > /etc/mwan3.user << 'HOOKEOF'
 #!/bin/sh
-# mwan3 事件钩子 - WAN连接后自动认证
-[ "$1" = "wan" ] && [ "$2" = "connected" ] && {
+# mwan3 事件钩子 - WAN ifup 后自动检查认证
+[ "$INTERFACE" = "wan" ] && [ "$ACTION" = "ifup" ] && {
     sleep 2
-    /root/campus_auth.sh hook >> /var/log/campus_auth.log 2>&1 &
+    /root/campus_auth.sh hook >/dev/null 2>&1 &
 }
 HOOKEOF
 chmod +x /etc/mwan3.user
@@ -594,10 +604,12 @@ touch /etc/crontabs/root
 sed -i '/campus_auth/d' /etc/crontabs/root 2>/dev/null || true
 
 # 添加新配置
-echo "0 0 * * * /root/campus_auth.sh midnight >> /var/log/campus_auth.log 2>&1" >> /etc/crontabs/root
-echo "0 6 * * * /root/campus_auth.sh morning >> /var/log/campus_auth.log 2>&1" >> /etc/crontabs/root
+echo "# ========== 校园网智能切换系统计划任务 ==========" >> /etc/crontabs/root
+echo "# 如需物理断网策略，请手动添加（默认不强制禁用 WAN）" >> /etc/crontabs/root
+echo "0 0 * * * /root/campus_auth.sh midnight >/dev/null 2>&1" >> /etc/crontabs/root
+echo "0 6 * * * /root/campus_auth.sh morning >/dev/null 2>&1" >> /etc/crontabs/root
 # 每30分钟检查一次认证状态
-echo "*/30 * * * * /root/campus_auth.sh hook >> /var/log/campus_auth.log 2>&1" >> /etc/crontabs/root
+echo "*/30 * * * * /root/campus_auth.sh hook >/dev/null 2>&1" >> /etc/crontabs/root
 
 # ============================================================
 # 8. 安装 LuCI Web 界面
